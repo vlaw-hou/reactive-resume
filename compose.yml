@@ -91,7 +91,7 @@ services:
     ports:
       - 100.92.42.42:3987:3000
     environment:
-    
+      - POSTGRES_DATABASE_URL=postgresql://${}:${}@postgres_db:5432/reactive
     env_file:
       - path: .env
         required: false
