@@ -79,23 +79,24 @@ services:
       seaweedfs:
         condition: service_healthy
 
+  networks:
+    caddynet:
+      external: true
+
   reactive_resume:
-    # image: ghcr.io/reactive-resume/reactive-resume:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    container_name: reactive-resume
+    image: ghcr.io/reactive-resume/reactive-resume:6.0.4
     networks:
-      - data_network
-      - storage_network
+      - caddynet
     ports:
-      - "3000:3000"
+      - 100.92.42.42:3987:3000
+    environment:
+    
     env_file:
-      - path: .env.example
-        required: false
       - path: .env
         required: false
     volumes:
-      - ./data:/app/data
+      - /opt/vps3/vps3-data/reactive-resume/_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
