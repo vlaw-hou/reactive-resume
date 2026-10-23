@@ -1,90 +1,10 @@
 name: reactive_resume
 
+networks:
+  caddynet:
+    external: true
+
 services:
-  postgres:
-    image: postgres:latest
-    restart: unless-stopped
-    networks:
-      - data_network
-    environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=defaultuser
-      - POSTGRES_PASSWORD=L7w44ZsTXeXbgRO8Ksdsgmw9iea1F0qK
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
-      start_period: 10s
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  redis:
-    image: redis:latest
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    networks:
-      - data_network
-    # Not exposed on the host by default. Redis can contain agent stream data
-    # including user chat content; keep it internal to the Docker network.
-    # Uncomment the ports block below if you need host access for tooling.
-    # ports:
-    #   - "127.0.0.1:6379:6379"
-    volumes:
-      - redis_data:/data
-    environment:
-      - VALKEY_PASSWORD=pRUOowlVI0oQ4A0iEGiQ9b0xXDDiKXwG # default pw for valkey
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      start_period: 5s
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  seaweedfs:
-    image: chrislusf/seaweedfs:latest
-    restart: unless-stopped
-    command: server -s3 -filer -dir=/data -ip=0.0.0.0
-    networks:
-      - storage_network
-    environment:
-      - AWS_ACCESS_KEY_ID=seaweedfs
-      - AWS_SECRET_ACCESS_KEY=seaweedfs
-    ports:
-      - "8333:8333"
-    volumes:
-      - seaweedfs_data:/data
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8888"]
-      start_period: 10s
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  seaweedfs_create_bucket:
-    image: amazon/aws-cli:latest
-    restart: on-failure
-    environment:
-      - AWS_ACCESS_KEY_ID=seaweedfs
-      - AWS_SECRET_ACCESS_KEY=seaweedfs
-      - AWS_DEFAULT_REGION=us-east-1
-    entrypoint: >
-      /bin/sh -c "
-        aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket reactive-resume 2>/dev/null ||
-        aws --endpoint-url http://seaweedfs:8333 s3 mb s3://reactive-resume
-      "
-    networks:
-      - storage_network
-    depends_on:
-      seaweedfs:
-        condition: service_healthy
-
-  networks:
-    caddynet:
-      external: true
-
   reactive_resume:
     container_name: reactive-resume
     image: ghcr.io/reactive-resume/reactive-resume:6.0.4
@@ -93,22 +13,34 @@ services:
     ports:
       - 100.92.42.42:3987:3000
     environment:
-      - POSTGRES_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/reactive
-      - VALKEY_DATABASE_URL=valkey://:${VALKEY_PASSWORD}@valkey-db:6379/4
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/reactive
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=defaultuser
+      - POSTGRES_PASSWORD=L7w44ZsTXeXbgRO8Ksdsgmw9iea1F0qK
+      
+      - AUTH_SECRET= ${AUTH_SECRET}
+
+      - STORAGE_BACKEND=s3
+      - S3_ACCESS_KEY_ID=""
+      - S3_SECRET_ACCESS_KEY=""
+      - S3_BUCKET=""
+      - S3_REGION=us-east-1
+      - S3_ENDPOINT=http://rustfs-server:9000
+
+      - AI_PROVIDER=openai-compatible
+      - AI_MODEL=
+      - AI_API_KEY
+      - AI_BASE_URL
+
+      - REDIS_URL=valkey://:${VALKEY_PASSWORD}@valkey-db:6379/4
+      - VALKEY_PASSWORD=pRUOowlVI0oQ4A0iEGiQ9b0xXDDiKXwG # default pw for valkey
+      
     env_file:
       - path: .env
         required: false
     volumes:
       - /opt/vps3/vps3-data/reactive-resume/_data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      seaweedfs:
-        condition: service_healthy
-      seaweedfs_create_bucket:
-        condition: service_completed_successfully
+
     healthcheck:
       test:
         [
@@ -122,11 +54,4 @@ services:
       timeout: 10s
       retries: 3
 
-volumes:
-  postgres_data:
-  redis_data:
-  seaweedfs_data:
 
-networks:
-  data_network:
-  storage_network:
